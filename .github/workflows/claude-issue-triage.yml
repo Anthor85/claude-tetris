@@ -67,6 +67,12 @@ jobs:
             Escribe el comentario en un fichero temporal y publicalo con:
             gh issue comment ${{ github.event.issue.number }} --body-file <fichero>
 
+            El comentario debe estar escrito en Markdown valido de GitHub (GitHub Flavored Markdown):
+            encabezados con `##`, negritas con `**`, listas con `-`, codigo y referencias a ficheros
+            entre backticks, y bloques de codigo con triple backtick indicando el lenguaje.
+            Deja una linea en blanco entre parrafos, encabezados y listas para que GitHub los renderice
+            correctamente. No uses HTML salvo el comentario marcador inicial.
+
             El comentario debe empezar EXACTAMENTE por la linea "<!-- claude-triage -->" y seguir
             esta plantilla:
 
