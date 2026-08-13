@@ -1,0 +1,93 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: claude-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    # Solo al abrir el issue o al editar su cuerpo/titulo (el post principal)
+    if: >
+      github.event.action == 'opened' ||
+      github.event.changes.body != null ||
+      github.event.changes.title != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Analizar issue con Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowedTools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh label list:*),Bash(gh api:*)"'
+          prompt: |
+            Eres el triador automatico del repositorio ${{ github.repository }} (un Tetris en JavaScript vanilla + HTML5 Canvas, sin build ni tests).
+            Analiza el issue numero ${{ github.event.issue.number }}.
+
+            PASO 1 - Idempotencia (hazlo ANTES que nada):
+            Ejecuta: gh issue view ${{ github.event.issue.number }} --json comments
+            Si algun comentario contiene la cadena "<!-- claude-triage -->", este issue YA fue analizado:
+            termina inmediatamente sin etiquetar y sin comentar nada. No hagas ningun paso mas.
+
+            PASO 2 - Leer el issue:
+            gh issue view ${{ github.event.issue.number }} --json title,body,labels
+
+            PASO 3 - Labels disponibles:
+            gh label list --json name,description
+            REGLA ESTRICTA: solo puedes usar nombres de labels que aparezcan en esa lista.
+            Nunca crees labels nuevas ni inventes nombres. Si ninguna encaja, no etiquetes.
+
+            PASO 4 - Investigar el codigo:
+            Usa Read/Grep/Glob sobre game.js, index.html, style.css, README.md y CLAUDE.md.
+            Funciones clave de game.js: collide, tryRotate, rotateCW, spawn, lockPiece, merge,
+            clearLines, loop, draw, drawBlock, drawNext, init.
+            Restricciones del proyecto (ver CLAUDE.md): COLS/ROWS/BLOCK deben coincidir con
+            width/height del <canvas id="board"> en index.html; drawNext centra en rejilla 4x4;
+            los IDs del DOM se cachean en el top level de game.js; todo el texto de UI en espanol.
+
+            PASO 5 - Etiquetar:
+            gh issue edit ${{ github.event.issue.number }} --add-label "..."
+            (solo labels existentes; omite este paso si ninguna aplica)
+
+            PASO 6 - Publicar el diagnostico:
+            Escribe el comentario en un fichero temporal y publicalo con:
+            gh issue comment ${{ github.event.issue.number }} --body-file <fichero>
+
+            El comentario debe empezar EXACTAMENTE por la linea "<!-- claude-triage -->" y seguir
+            esta plantilla:
+
+            ## Diagnostico automatico
+
+            **Resumen** - que reporta o pide el issue, en 1-2 frases.
+
+            **Tipo** - bug / mejora / duda / documentacion, y que labels has aplicado (o por que ninguna).
+
+            **Zona del codigo** - archivos y funciones concretas, con referencias tipo `game.js:123`.
+
+            **Causa probable / punto de cambio** - si es un bug, la hipotesis de causa; si es una
+            mejora, donde encaja en la arquitectura actual.
+
+            **Reproduccion** - pasos si es un bug, o "no aplica".
+
+            **Esbozo de solucion** - pasos concretos por archivo, respetando las restricciones de CLAUDE.md.
+
+            **Riesgos / dudas abiertas** - incluida la informacion que falte en el issue.
+
+            Cierra con una nota indicando que se puede comentar `@claude` en el issue para pasar a implementar.
+
+            TONO: todo en espanol, conciso. No inventes numeros de linea ni codigo que no hayas leido.
+            Marca explicitamente lo que sea suposicion.
