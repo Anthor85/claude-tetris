@@ -1,0 +1,5 @@
+Tiempo en Torre-Pacheco (Murcia, ES)
+Fuente: open-meteo.com
+
+[2026-08-13 11:00] Temp 29.9°C | Sensación 34.5°C | Humedad 71% | Precip 0.00 mm | Viento 10.5 km/h | Código 2 (parcialmente nublado)
+[2026-08-13 11:15] Temp 30.2°C | Sensación 34.7°C | Humedad 69% | Precip 0.00 mm | Viento 11.0 km/h | Código 3 (nublado)

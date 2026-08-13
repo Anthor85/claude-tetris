@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -7,7 +9,10 @@
 body {
   background: #0f0f17;
   color: #e0e0e0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -23,6 +28,18 @@ body {
   display: flex;
   gap: 20px;
   align-items: flex-start;
+}
+
+.game-title {
+  position: absolute;
+  top: -60px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 48px;
+  font-weight: bold;
+  color: #7aa2f7;
+  letter-spacing: 4px;
 }
 
 #board {
@@ -56,7 +73,7 @@ body {
 }
 
 .value {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 26px;
   font-weight: 700;
   color: #7aa2f7;
@@ -128,7 +145,7 @@ kbd {
 }
 
 #overlay-score {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 14px;
   color: #7aa2f7;
 }
