@@ -56,7 +56,9 @@ body {
   justify-content: center;
   min-height: 100vh;
   user-select: none;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .wrapper {
@@ -84,6 +86,7 @@ body {
 #theme-toggle {
   position: absolute;
   top: -56px;
+  z-index: 10;
   right: 0;
   width: 36px;
   height: 36px;
@@ -97,7 +100,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, transform 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.15s;
 }
 
 #theme-toggle:hover {

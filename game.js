@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 const COLS = 10;
 const ROWS = 20;
@@ -6,44 +6,84 @@ const BLOCK = 30;
 
 const COLORS = [
   null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#90caf9', // J - azul pálido
-  '#ffb74d', // L - orange
+  "#4dd0e1", // I - cyan
+  "#ffd54f", // O - yellow
+  "#ba68c8", // T - purple
+  "#81c784", // S - green
+  "#e57373", // Z - red
+  "#90caf9", // J - azul pálido
+  "#ffb74d", // L - orange
 ];
 
 const PIECES = [
   null,
-  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
-  [[2,2],[2,2]],                               // O
-  [[0,3,0],[3,3,3],[0,0,0]],                  // T
-  [[0,4,4],[4,4,0],[0,0,0]],                  // S
-  [[5,5,0],[0,5,5],[0,0,0]],                  // Z
-  [[6,0,0],[6,6,6],[0,0,0]],                  // J
-  [[0,0,7],[7,7,7],[0,0,0]],                  // L
+  [
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+  ], // I
+  [
+    [2, 2],
+    [2, 2],
+  ], // O
+  [
+    [0, 3, 0],
+    [3, 3, 3],
+    [0, 0, 0],
+  ], // T
+  [
+    [0, 4, 4],
+    [4, 4, 0],
+    [0, 0, 0],
+  ], // S
+  [
+    [5, 5, 0],
+    [0, 5, 5],
+    [0, 0, 0],
+  ], // Z
+  [
+    [6, 0, 0],
+    [6, 6, 6],
+    [0, 0, 0],
+  ], // J
+  [
+    [0, 0, 7],
+    [7, 7, 7],
+    [0, 0, 0],
+  ], // L
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
-const canvas = document.getElementById('board');
-const ctx = canvas.getContext('2d');
-const nextCanvas = document.getElementById('next-canvas');
-const nextCtx = nextCanvas.getContext('2d');
-const scoreEl = document.getElementById('score');
-const linesEl = document.getElementById('lines');
-const levelEl = document.getElementById('level');
-const overlay = document.getElementById('overlay');
-const overlayTitle = document.getElementById('overlay-title');
-const overlayScore = document.getElementById('overlay-score');
-const restartBtn = document.getElementById('restart-btn');
-const themeToggleBtn = document.getElementById('theme-toggle');
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+const nextCanvas = document.getElementById("next-canvas");
+const nextCtx = nextCanvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const linesEl = document.getElementById("lines");
+const levelEl = document.getElementById("level");
+const overlay = document.getElementById("overlay");
+const overlayTitle = document.getElementById("overlay-title");
+const overlayScore = document.getElementById("overlay-score");
+const restartBtn = document.getElementById("restart-btn");
+const themeToggleBtn = document.getElementById("theme-toggle");
 
-const THEME_KEY = 'tetris-theme';
+const THEME_KEY = "tetris-theme";
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, gridLineColor;
+let board,
+  current,
+  next,
+  score,
+  lines,
+  level,
+  paused,
+  gameOver,
+  lastTime,
+  dropAccum,
+  dropInterval,
+  animId,
+  gridLineColor;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -51,8 +91,13 @@ function createBoard() {
 
 function randomPiece() {
   const type = Math.floor(Math.random() * 7) + 1;
-  const shape = PIECES[type].map(row => [...row]);
-  return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0 };
+  const shape = PIECES[type].map((row) => [...row]);
+  return {
+    type,
+    shape,
+    x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2),
+    y: 0,
+  };
 }
 
 function collide(shape, ox, oy) {
@@ -69,11 +114,11 @@ function collide(shape, ox, oy) {
 }
 
 function rotateCW(shape) {
-  const rows = shape.length, cols = shape[0].length;
+  const rows = shape.length,
+    cols = shape[0].length;
   const result = Array.from({ length: cols }, () => new Array(rows).fill(0));
   for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++)
-      result[c][rows - 1 - r] = shape[r][c];
+    for (let c = 0; c < cols; c++) result[c][rows - 1 - r] = shape[r][c];
   return result;
 }
 
@@ -99,7 +144,7 @@ function merge() {
 function clearLines() {
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r].every(v => v !== 0)) {
+    if (board[r].every((v) => v !== 0)) {
       board.splice(r, 1);
       board.unshift(new Array(COLS).fill(0));
       cleared++;
@@ -166,7 +211,7 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   context.fillStyle = color;
   context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
+  context.fillStyle = "rgba(255,255,255,0.12)";
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
   context.globalAlpha = 1;
 }
@@ -194,8 +239,7 @@ function draw() {
 
   // board
   for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      drawBlock(ctx, c, r, board[r][c], BLOCK);
+    for (let c = 0; c < COLS; c++) drawBlock(ctx, c, r, board[r][c], BLOCK);
 
   // ghost
   const gy = ghostY();
@@ -222,16 +266,18 @@ function drawNext() {
 }
 
 function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  themeToggleBtn.textContent = theme === 'light' ? '🌙' : '☀️';
+  document.documentElement.setAttribute("data-theme", theme);
+  console.log(document.documentElement.getAttribute("data-theme"));
+  themeToggleBtn.textContent = theme === "light" ? "🌙" : "☀️";
   gridLineColor = getComputedStyle(document.documentElement)
-    .getPropertyValue('--grid-line')
+    .getPropertyValue("--grid-line")
     .trim();
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme');
-  const nextTheme = current === 'light' ? 'dark' : 'light';
+  console.log("toggleTheme called");
+  const current = document.documentElement.getAttribute("data-theme");
+  const nextTheme = current === "light" ? "dark" : "light";
   localStorage.setItem(THEME_KEY, nextTheme);
   applyTheme(nextTheme);
 }
@@ -239,9 +285,9 @@ function toggleTheme() {
 function endGame() {
   gameOver = true;
   cancelAnimationFrame(animId);
-  overlayTitle.textContent = 'GAME OVER';
+  overlayTitle.textContent = "GAME OVER";
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
-  overlay.classList.remove('hidden');
+  overlay.classList.remove("hidden");
 }
 
 function togglePause() {
@@ -252,9 +298,9 @@ function togglePause() {
     loop(lastTime);
   } else {
     cancelAnimationFrame(animId);
-    overlayTitle.textContent = 'PAUSA';
-    overlayScore.textContent = '';
-    overlay.classList.remove('hidden');
+    overlayTitle.textContent = "PAUSA";
+    overlayScore.textContent = "";
+    overlay.classList.remove("hidden");
   }
 }
 
@@ -287,29 +333,32 @@ function init() {
   next = randomPiece();
   spawn();
   updateHUD();
-  overlay.classList.add('hidden');
+  overlay.classList.add("hidden");
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
-document.addEventListener('keydown', e => {
-  if (e.code === 'KeyP') { togglePause(); return; }
+document.addEventListener("keydown", (e) => {
+  if (e.code === "KeyP") {
+    togglePause();
+    return;
+  }
   if (paused || gameOver) return;
   switch (e.code) {
-    case 'ArrowLeft':
+    case "ArrowLeft":
       if (!collide(current.shape, current.x - 1, current.y)) current.x--;
       break;
-    case 'ArrowRight':
+    case "ArrowRight":
       if (!collide(current.shape, current.x + 1, current.y)) current.x++;
       break;
-    case 'ArrowDown':
+    case "ArrowDown":
       softDrop();
       break;
-    case 'ArrowUp':
-    case 'KeyX':
+    case "ArrowUp":
+    case "KeyX":
       tryRotate();
       break;
-    case 'Space':
+    case "Space":
       e.preventDefault();
       hardDrop();
       break;
@@ -317,8 +366,8 @@ document.addEventListener('keydown', e => {
   updateHUD();
 });
 
-restartBtn.addEventListener('click', init);
-themeToggleBtn.addEventListener('click', toggleTheme);
+restartBtn.addEventListener("click", init);
+themeToggleBtn.addEventListener("click", toggleTheme);
 
-applyTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
+applyTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
 init();
