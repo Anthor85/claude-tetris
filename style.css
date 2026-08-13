@@ -147,6 +147,12 @@ body {
   letter-spacing: 1px;
 }
 
+.power-name {
+  font-size: 11px;
+  color: var(--controls-text);
+  letter-spacing: 1px;
+}
+
 #next-canvas {
   display: block;
   border: 1px solid var(--surface-border);
