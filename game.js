@@ -14,9 +14,31 @@ const COLORS = [
   "#90caf9", // J - azul pálido
   "#ffb74d", // L - orange
   "#cfd8dc", // comodín (Tinte)
+  "#f06292", // + (Ataque matemático)
+  "#78909c", // basura
 ];
 
 const WILD = 8;
+const PLUS = 9;
+const GARBAGE = 10;
+
+// ---- Modos de juego ----
+const MODES = {
+  NORMAL: "normal",
+  TIME: "time",
+  GARBAGE: "garbage",
+  MATH: "math",
+};
+const MODE_NAMES = {
+  normal: "Normal",
+  time: "Tiempo",
+  garbage: "Basura",
+  math: "Ataque mat.",
+};
+const TIME_LIMIT_MS = 120000;
+const TIME_TARGET_LINES = 40;
+const GARBAGE_INTERVAL = 10000;
+const PLUS_CHANCE = 0.05;
 
 const POWERUP_CHANCE = 0.05;
 const POWERUPS = [
@@ -65,6 +87,12 @@ const PIECES = [
     [7, 7, 7],
     [0, 0, 0],
   ], // L
+  null, // 8 = comodín (Tinte), no es una pieza jugable
+  [
+    [0, 9, 0],
+    [9, 9, 9],
+    [0, 9, 0],
+  ], // + (Ataque matemático)
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
@@ -83,6 +111,17 @@ const restartBtn = document.getElementById("restart-btn");
 const powerIconEl = document.getElementById("power-icon");
 const powerNameEl = document.getElementById("power-name");
 const themeToggleBtn = document.getElementById("theme-toggle");
+const menuEl = document.getElementById("menu");
+const menuBtn = document.getElementById("menu-btn");
+const modeNameEl = document.getElementById("mode-name");
+const timeSection = document.getElementById("time-section");
+const timeEl = document.getElementById("time");
+const goalSection = document.getElementById("goal-section");
+const goalEl = document.getElementById("goal");
+const garbageSection = document.getElementById("garbage-section");
+const garbageTimerEl = document.getElementById("garbage-timer");
+const powerSection = document.getElementById("power-section");
+const modeButtons = document.querySelectorAll(".mode-btn");
 
 const THEME_KEY = "tetris-theme";
 
@@ -102,7 +141,10 @@ let board,
   armedPower,
   freezeMs,
   lastLockX,
-  lastLockY;
+  lastLockY,
+  mode,
+  timeLeftMs,
+  garbageAccum;
 
 // evita que la limpieza de líneas encadenada por Gravedad detone otro power-up
 let firingPower = false;
@@ -112,7 +154,10 @@ function createBoard() {
 }
 
 function randomPiece() {
-  const type = Math.floor(Math.random() * 7) + 1;
+  const type =
+    mode === MODES.MATH && Math.random() < PLUS_CHANCE
+      ? PLUS
+      : Math.floor(Math.random() * 7) + 1;
   const shape = PIECES[type].map((row) => [...row]);
   return {
     type,
@@ -180,7 +225,23 @@ function clearLines() {
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
     if (armedPower !== null && !firingPower) triggerPowerUp();
+    if (mode === MODES.TIME && lines >= TIME_TARGET_LINES) endGame("win");
   }
+}
+
+// ---- Modo Basura ----
+
+function addGarbageRow() {
+  if (board[0].some((v) => v !== 0)) {
+    endGame();
+    return;
+  }
+  board.shift();
+  const row = new Array(COLS).fill(GARBAGE);
+  row[Math.floor(Math.random() * COLS)] = 0;
+  board.push(row);
+  current.y--;
+  if (collide(current.shape, current.x, current.y)) endGame();
 }
 
 // ---- Power-ups ----
@@ -311,7 +372,11 @@ function clamp(v, min, max) {
 function spawn() {
   current = next;
   next = randomPiece();
-  if (armedPower === null && Math.random() < POWERUP_CHANCE) {
+  if (
+    mode === MODES.NORMAL &&
+    armedPower === null &&
+    Math.random() < POWERUP_CHANCE
+  ) {
     armedPower = Math.floor(Math.random() * POWERUPS.length);
     updatePowerHUD();
   }
@@ -325,6 +390,28 @@ function updateHUD() {
   scoreEl.textContent = score.toLocaleString();
   linesEl.textContent = lines;
   levelEl.textContent = level;
+  if (mode === MODES.TIME) {
+    timeEl.textContent = formatTime(timeLeftMs);
+    goalEl.textContent = `${Math.min(lines, TIME_TARGET_LINES)}/${TIME_TARGET_LINES} líneas`;
+  } else if (mode === MODES.GARBAGE) {
+    const left = Math.max(0, GARBAGE_INTERVAL - garbageAccum);
+    garbageTimerEl.textContent = `${Math.ceil(left / 1000)}s`;
+  }
+}
+
+function formatTime(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function applyModeUI() {
+  modeNameEl.textContent = MODE_NAMES[mode];
+  timeSection.classList.toggle("hidden", mode !== MODES.TIME);
+  goalSection.classList.toggle("hidden", mode !== MODES.TIME);
+  garbageSection.classList.toggle("hidden", mode !== MODES.GARBAGE);
+  powerSection.classList.toggle("hidden", mode !== MODES.NORMAL);
 }
 
 function updatePowerHUD() {
@@ -434,11 +521,21 @@ function toggleTheme() {
   applyTheme(nextTheme);
 }
 
-function endGame() {
+function endGame(reason) {
+  if (gameOver) return;
   gameOver = true;
   cancelAnimationFrame(animId);
-  overlayTitle.textContent = "GAME OVER";
-  overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  if (reason === "win") {
+    const used = TIME_LIMIT_MS - timeLeftMs;
+    overlayTitle.textContent = "¡COMPLETADO!";
+    overlayScore.textContent = `Tiempo: ${formatTime(used)} · Puntuación: ${score.toLocaleString()}`;
+  } else if (reason === "timeout") {
+    overlayTitle.textContent = "SE ACABÓ EL TIEMPO";
+    overlayScore.textContent = `${lines}/${TIME_TARGET_LINES} líneas · Puntuación: ${score.toLocaleString()}`;
+  } else {
+    overlayTitle.textContent = "GAME OVER";
+    overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  }
   overlay.classList.remove("hidden");
 }
 
@@ -475,8 +572,46 @@ function loop(ts) {
       }
     }
   }
+
+  if (!gameOver && mode === MODES.TIME) {
+    const before = Math.ceil(timeLeftMs / 1000);
+    timeLeftMs -= dt;
+    if (Math.ceil(Math.max(0, timeLeftMs) / 1000) !== before) updateHUD();
+    if (timeLeftMs <= 0) endGame("timeout");
+  }
+
+  if (!gameOver && mode === MODES.GARBAGE) {
+    const before = Math.ceil((GARBAGE_INTERVAL - garbageAccum) / 1000);
+    garbageAccum += dt;
+    if (garbageAccum >= GARBAGE_INTERVAL) {
+      garbageAccum = 0;
+      addGarbageRow();
+      updateHUD();
+    } else if (Math.ceil((GARBAGE_INTERVAL - garbageAccum) / 1000) !== before) {
+      updateHUD();
+    }
+  }
+
   draw();
+  if (gameOver || paused) return;
   animId = requestAnimationFrame(loop);
+}
+
+function startGame(m) {
+  mode = MODE_NAMES[m] ? m : MODES.NORMAL;
+  timeLeftMs = TIME_LIMIT_MS;
+  garbageAccum = 0;
+  applyModeUI();
+  menuEl.classList.add("hidden");
+  init();
+}
+
+function showMenu() {
+  cancelAnimationFrame(animId);
+  gameOver = true;
+  paused = false;
+  overlay.classList.add("hidden");
+  menuEl.classList.remove("hidden");
 }
 
 function init() {
@@ -531,8 +666,12 @@ document.addEventListener("keydown", (e) => {
   updateHUD();
 });
 
-restartBtn.addEventListener("click", init);
+restartBtn.addEventListener("click", () => startGame(mode));
+menuBtn.addEventListener("click", showMenu);
+modeButtons.forEach((btn) =>
+  btn.addEventListener("click", () => startGame(btn.dataset.mode)),
+);
 themeToggleBtn.addEventListener("click", toggleTheme);
 
 applyTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
-init();
+showMenu();
