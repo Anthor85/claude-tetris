@@ -13,7 +13,42 @@ const COLORS = [
   "#e57373", // Z - red
   "#90caf9", // J - azul pálido
   "#ffb74d", // L - orange
+  "#cfd8dc", // comodín (Tinte)
+  "#f06292", // + (Ataque matemático)
+  "#78909c", // basura
 ];
+
+const WILD = 8;
+const PLUS = 9;
+const GARBAGE = 10;
+
+// ---- Modos de juego ----
+const MODES = {
+  NORMAL: "normal",
+  TIME: "time",
+  GARBAGE: "garbage",
+  MATH: "math",
+};
+const MODE_NAMES = {
+  normal: "Normal",
+  time: "Tiempo",
+  garbage: "Basura",
+  math: "Ataque mat.",
+};
+const TIME_LIMIT_MS = 120000;
+const TIME_TARGET_LINES = 40;
+const GARBAGE_INTERVAL = 10000;
+const PLUS_CHANCE = 0.05;
+
+const POWERUP_CHANCE = 0.05;
+const POWERUPS = [
+  { id: "bomb", icon: "💣", name: "Bomba" },
+  { id: "ray", icon: "⚡", name: "Rayo" },
+  { id: "tint", icon: "🎨", name: "Tinte" },
+  { id: "gravity", icon: "⬇️", name: "Gravedad" },
+  { id: "freeze", icon: "❄️", name: "Congelar" },
+];
+const FREEZE_MS = 5000;
 
 const PIECES = [
   null,
@@ -52,6 +87,12 @@ const PIECES = [
     [7, 7, 7],
     [0, 0, 0],
   ], // L
+  null, // 8 = comodín (Tinte), no es una pieza jugable
+  [
+    [0, 9, 0],
+    [9, 9, 9],
+    [0, 9, 0],
+  ], // + (Ataque matemático)
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
@@ -67,7 +108,20 @@ const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlay-title");
 const overlayScore = document.getElementById("overlay-score");
 const restartBtn = document.getElementById("restart-btn");
+const powerIconEl = document.getElementById("power-icon");
+const powerNameEl = document.getElementById("power-name");
 const themeToggleBtn = document.getElementById("theme-toggle");
+const menuEl = document.getElementById("menu");
+const menuBtn = document.getElementById("menu-btn");
+const modeNameEl = document.getElementById("mode-name");
+const timeSection = document.getElementById("time-section");
+const timeEl = document.getElementById("time");
+const goalSection = document.getElementById("goal-section");
+const goalEl = document.getElementById("goal");
+const garbageSection = document.getElementById("garbage-section");
+const garbageTimerEl = document.getElementById("garbage-timer");
+const powerSection = document.getElementById("power-section");
+const modeButtons = document.querySelectorAll(".mode-btn");
 
 const THEME_KEY = "tetris-theme";
 
@@ -83,14 +137,27 @@ let board,
   dropAccum,
   dropInterval,
   animId,
-  gridLineColor;
+  gridLineColor,
+  armedPower,
+  freezeMs,
+  lastLockX,
+  lastLockY,
+  mode,
+  timeLeftMs,
+  garbageAccum;
+
+// evita que la limpieza de líneas encadenada por Gravedad detone otro power-up
+let firingPower = false;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
 }
 
 function randomPiece() {
-  const type = Math.floor(Math.random() * 7) + 1;
+  const type =
+    mode === MODES.MATH && Math.random() < PLUS_CHANCE
+      ? PLUS
+      : Math.floor(Math.random() * 7) + 1;
   const shape = PIECES[type].map((row) => [...row]);
   return {
     type,
@@ -157,7 +224,95 @@ function clearLines() {
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
+    if (armedPower !== null && !firingPower) triggerPowerUp();
+    if (mode === MODES.TIME && lines >= TIME_TARGET_LINES) endGame("win");
   }
+}
+
+// ---- Modo Basura ----
+
+function addGarbageRow() {
+  if (board[0].some((v) => v !== 0)) {
+    endGame();
+    return;
+  }
+  board.shift();
+  const row = new Array(COLS).fill(GARBAGE);
+  row[Math.floor(Math.random() * COLS)] = 0;
+  board.push(row);
+  current.y--;
+  if (collide(current.shape, current.x, current.y)) endGame();
+}
+
+// ---- Power-ups ----
+
+function triggerPowerUp() {
+  const power = POWERUPS[armedPower];
+  armedPower = null;
+  firingPower = true;
+  switch (power.id) {
+    case "bomb":
+      powerBomb();
+      break;
+    case "ray":
+      powerRay();
+      break;
+    case "tint":
+      powerTint();
+      break;
+    case "gravity":
+      powerGravity();
+      break;
+    case "freeze":
+      powerFreeze();
+      break;
+  }
+  firingPower = false;
+  updatePowerHUD();
+}
+
+function powerBomb() {
+  for (let r = lastLockY - 1; r <= lastLockY + 1; r++)
+    for (let c = lastLockX - 1; c <= lastLockX + 1; c++)
+      if (r >= 0 && r < ROWS && c >= 0 && c < COLS) board[r][c] = 0;
+}
+
+function powerRay() {
+  for (let c = 0; c < COLS; c++) board[lastLockY][c] = 0;
+  for (let r = 0; r < ROWS; r++) board[r][lastLockX] = 0;
+}
+
+function powerTint() {
+  const counts = new Array(COLORS.length).fill(0);
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const v = board[r][c];
+      if (v && v !== WILD) counts[v]++;
+    }
+  let best = 0;
+  for (let i = 1; i < counts.length; i++) if (counts[i] > counts[best]) best = i;
+  if (!best || !counts[best]) return;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) if (board[r][c] === best) board[r][c] = WILD;
+}
+
+function powerGravity() {
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (board[r][c]) {
+        board[write][c] = board[r][c];
+        if (write !== r) board[r][c] = 0;
+        write--;
+      }
+    }
+    for (let r = write; r >= 0; r--) board[r][c] = 0;
+  }
+  clearLines();
+}
+
+function powerFreeze() {
+  freezeMs = FREEZE_MS;
 }
 
 function ghostY() {
@@ -184,14 +339,47 @@ function softDrop() {
 }
 
 function lockPiece() {
+  recordLockCenter();
   merge();
   clearLines();
   spawn();
 }
 
+// centro de las celdas ocupadas de la pieza actual: objetivo de Bomba y Rayo
+function recordLockCenter() {
+  let minX = COLS,
+    maxX = -1,
+    minY = ROWS,
+    maxY = -1;
+  for (let r = 0; r < current.shape.length; r++)
+    for (let c = 0; c < current.shape[r].length; c++)
+      if (current.shape[r][c]) {
+        const x = current.x + c;
+        const y = current.y + r;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+  lastLockX = clamp(Math.round((minX + maxX) / 2), 0, COLS - 1);
+  lastLockY = clamp(Math.round((minY + maxY) / 2), 0, ROWS - 1);
+}
+
+function clamp(v, min, max) {
+  return v < min ? min : v > max ? max : v;
+}
+
 function spawn() {
   current = next;
   next = randomPiece();
+  if (
+    mode === MODES.NORMAL &&
+    armedPower === null &&
+    Math.random() < POWERUP_CHANCE
+  ) {
+    armedPower = Math.floor(Math.random() * POWERUPS.length);
+    updatePowerHUD();
+  }
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
@@ -202,6 +390,43 @@ function updateHUD() {
   scoreEl.textContent = score.toLocaleString();
   linesEl.textContent = lines;
   levelEl.textContent = level;
+  if (mode === MODES.TIME) {
+    timeEl.textContent = formatTime(timeLeftMs);
+    goalEl.textContent = `${Math.min(lines, TIME_TARGET_LINES)}/${TIME_TARGET_LINES} líneas`;
+  } else if (mode === MODES.GARBAGE) {
+    const left = Math.max(0, GARBAGE_INTERVAL - garbageAccum);
+    garbageTimerEl.textContent = `${Math.ceil(left / 1000)}s`;
+  }
+}
+
+function formatTime(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function applyModeUI() {
+  modeNameEl.textContent = MODE_NAMES[mode];
+  timeSection.classList.toggle("hidden", mode !== MODES.TIME);
+  goalSection.classList.toggle("hidden", mode !== MODES.TIME);
+  garbageSection.classList.toggle("hidden", mode !== MODES.GARBAGE);
+  powerSection.classList.toggle("hidden", mode !== MODES.NORMAL);
+}
+
+function updatePowerHUD() {
+  if (freezeMs > 0) {
+    powerIconEl.textContent = "❄️";
+    powerNameEl.textContent = `Congelado ${Math.ceil(freezeMs / 1000)}s`;
+    return;
+  }
+  if (armedPower === null) {
+    powerIconEl.textContent = "—";
+    powerNameEl.textContent = "";
+    return;
+  }
+  powerIconEl.textContent = POWERUPS[armedPower].icon;
+  powerNameEl.textContent = POWERUPS[armedPower].name;
 }
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
@@ -213,6 +438,20 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = "rgba(255,255,255,0.12)";
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  if (colorIndex === WILD) {
+    // rombo central para distinguir el comodín
+    const cx = x * size + size / 2;
+    const cy = y * size + size / 2;
+    const d = size * 0.18;
+    context.fillStyle = "rgba(0,0,0,0.35)";
+    context.beginPath();
+    context.moveTo(cx, cy - d);
+    context.lineTo(cx + d, cy);
+    context.lineTo(cx, cy + d);
+    context.lineTo(cx - d, cy);
+    context.closePath();
+    context.fill();
+  }
   context.globalAlpha = 1;
 }
 
@@ -282,11 +521,21 @@ function toggleTheme() {
   applyTheme(nextTheme);
 }
 
-function endGame() {
+function endGame(reason) {
+  if (gameOver) return;
   gameOver = true;
   cancelAnimationFrame(animId);
-  overlayTitle.textContent = "GAME OVER";
-  overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  if (reason === "win") {
+    const used = TIME_LIMIT_MS - timeLeftMs;
+    overlayTitle.textContent = "¡COMPLETADO!";
+    overlayScore.textContent = `Tiempo: ${formatTime(used)} · Puntuación: ${score.toLocaleString()}`;
+  } else if (reason === "timeout") {
+    overlayTitle.textContent = "SE ACABÓ EL TIEMPO";
+    overlayScore.textContent = `${lines}/${TIME_TARGET_LINES} líneas · Puntuación: ${score.toLocaleString()}`;
+  } else {
+    overlayTitle.textContent = "GAME OVER";
+    overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  }
   overlay.classList.remove("hidden");
 }
 
@@ -307,17 +556,62 @@ function togglePause() {
 function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
-  if (dropAccum >= dropInterval) {
+  if (freezeMs > 0) {
+    const before = Math.ceil(freezeMs / 1000);
+    freezeMs = Math.max(0, freezeMs - dt);
     dropAccum = 0;
-    if (!collide(current.shape, current.x, current.y + 1)) {
-      current.y++;
-    } else {
-      lockPiece();
+    if (Math.ceil(freezeMs / 1000) !== before) updatePowerHUD();
+  } else {
+    dropAccum += dt;
+    if (dropAccum >= dropInterval) {
+      dropAccum = 0;
+      if (!collide(current.shape, current.x, current.y + 1)) {
+        current.y++;
+      } else {
+        lockPiece();
+      }
     }
   }
+
+  if (!gameOver && mode === MODES.TIME) {
+    const before = Math.ceil(timeLeftMs / 1000);
+    timeLeftMs -= dt;
+    if (Math.ceil(Math.max(0, timeLeftMs) / 1000) !== before) updateHUD();
+    if (timeLeftMs <= 0) endGame("timeout");
+  }
+
+  if (!gameOver && mode === MODES.GARBAGE) {
+    const before = Math.ceil((GARBAGE_INTERVAL - garbageAccum) / 1000);
+    garbageAccum += dt;
+    if (garbageAccum >= GARBAGE_INTERVAL) {
+      garbageAccum = 0;
+      addGarbageRow();
+      updateHUD();
+    } else if (Math.ceil((GARBAGE_INTERVAL - garbageAccum) / 1000) !== before) {
+      updateHUD();
+    }
+  }
+
   draw();
+  if (gameOver || paused) return;
   animId = requestAnimationFrame(loop);
+}
+
+function startGame(m) {
+  mode = MODE_NAMES[m] ? m : MODES.NORMAL;
+  timeLeftMs = TIME_LIMIT_MS;
+  garbageAccum = 0;
+  applyModeUI();
+  menuEl.classList.add("hidden");
+  init();
+}
+
+function showMenu() {
+  cancelAnimationFrame(animId);
+  gameOver = true;
+  paused = false;
+  overlay.classList.add("hidden");
+  menuEl.classList.remove("hidden");
 }
 
 function init() {
@@ -330,9 +624,15 @@ function init() {
   dropInterval = 1000;
   dropAccum = 0;
   lastTime = performance.now();
+  armedPower = null;
+  freezeMs = 0;
+  firingPower = false;
+  lastLockX = Math.floor(COLS / 2);
+  lastLockY = ROWS - 1;
   next = randomPiece();
   spawn();
   updateHUD();
+  updatePowerHUD();
   overlay.classList.add("hidden");
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
@@ -366,8 +666,12 @@ document.addEventListener("keydown", (e) => {
   updateHUD();
 });
 
-restartBtn.addEventListener("click", init);
+restartBtn.addEventListener("click", () => startGame(mode));
+menuBtn.addEventListener("click", showMenu);
+modeButtons.forEach((btn) =>
+  btn.addEventListener("click", () => startGame(btn.dataset.mode)),
+);
 themeToggleBtn.addEventListener("click", toggleTheme);
 
 applyTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
-init();
+showMenu();
