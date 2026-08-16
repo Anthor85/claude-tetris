@@ -133,7 +133,9 @@ const THEME_KEY = "tetris-theme";
 const START_LEVEL_KEY = "tetris-start-level";
 const MAX_START_LEVEL = 15;
 
+// nivel elegido en el menú (próxima partida) y el congelado para la partida en curso
 let startLevel = 1;
+let gameStartLevel = 1;
 
 let board,
   current,
@@ -231,7 +233,7 @@ function clearLines() {
   if (cleared) {
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
-    level = startLevel + Math.floor(lines / 10);
+    level = gameStartLevel + Math.floor(lines / 10);
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
     if (armedPower !== null && !firingPower) triggerPowerUp();
@@ -672,7 +674,8 @@ function init() {
   board = createBoard();
   score = 0;
   lines = 0;
-  level = startLevel;
+  gameStartLevel = startLevel;
+  level = gameStartLevel;
   paused = false;
   gameOver = false;
   dropInterval = Math.max(100, 1000 - (level - 1) * 90);
@@ -694,10 +697,6 @@ function init() {
 }
 
 document.addEventListener("keydown", (e) => {
-  // dentro del menú de pausa solo Escape actúa: teclear en el select o en un
-  // botón no debe mover la pieza ni alternar la pausa
-  const inPauseMenu = pauseMenuEl.contains(e.target);
-
   if (e.code === "Escape") {
     e.preventDefault();
     // Escape no hace nada con el menú de modos o el game over visibles
