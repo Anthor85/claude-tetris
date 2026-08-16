@@ -75,10 +75,18 @@
       <div class="overlay-box">
         <p id="overlay-title">GAME OVER</p>
         <p id="overlay-score"></p>
+        <div id="hiscore-form" class="hiscore-form hidden">
+          <label class="hiscore-form-label" for="hiscore-name">¡RECORD! Escribe tu nombre</label>
+          <div class="hiscore-form-row">
+            <input id="hiscore-name" type="text" maxlength="12" value="ANON" autocomplete="off" />
+            <button id="hiscore-save">Guardar</button>
+          </div>
+        </div>
         <div class="overlay-buttons">
           <button id="restart-btn">Reiniciar</button>
           <button id="menu-btn">Menú</button>
         </div>
+        <div id="overlay-hiscores" class="hiscores"></div>
       </div>
     </div>
 
@@ -101,6 +109,9 @@
           <span class="mode-btn-name">Ataque matemático</span>
           <span class="mode-desc">5% de piezas en forma de + (5 bloques)</span>
         </button>
+        <p class="hiscores-title">RECORDS</p>
+        <div id="menu-hiscores" class="hiscores"></div>
+        <button id="clear-hiscores" class="hiscore-clear-btn">Borrar records</button>
       </div>
     </div>
   </div>

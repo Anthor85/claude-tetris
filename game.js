@@ -122,8 +122,18 @@ const garbageSection = document.getElementById("garbage-section");
 const garbageTimerEl = document.getElementById("garbage-timer");
 const powerSection = document.getElementById("power-section");
 const modeButtons = document.querySelectorAll(".mode-btn");
+const menuHiscoresEl = document.getElementById("menu-hiscores");
+const overlayHiscoresEl = document.getElementById("overlay-hiscores");
+const hiscoreFormEl = document.getElementById("hiscore-form");
+const hiscoreNameEl = document.getElementById("hiscore-name");
+const hiscoreSaveBtn = document.getElementById("hiscore-save");
+const clearHiscoresBtn = document.getElementById("clear-hiscores");
 
 const THEME_KEY = "tetris-theme";
+const HISCORES_KEY = "tetris-hiscores";
+const HISCORES_MAX = 5;
+const NAME_MAX = 12;
+const DEFAULT_NAME = "ANON";
 
 let board,
   current,
@@ -144,7 +154,12 @@ let board,
   lastLockY,
   mode,
   timeLeftMs,
-  garbageAccum;
+  garbageAccum,
+  combo,
+  maxCombo;
+
+// índice de la fila recién insertada en la tabla de records (-1 = ninguna)
+let newHiscoreIndex = -1;
 
 // evita que la limpieza de líneas encadenada por Gravedad detone otro power-up
 let firingPower = false;
@@ -218,6 +233,17 @@ function clearLines() {
       r++;
     }
   }
+  // El combo se actualiza aquí (y no en lockPiece) para que ya esté al día si
+  // endGame("win") se dispara más abajo. `firingPower` evita que la limpieza
+  // encadenada por Gravedad infle el combo, igual que con los power-ups.
+  if (!firingPower) {
+    if (cleared) {
+      combo++;
+      maxCombo = Math.max(maxCombo, combo);
+    } else {
+      combo = 0;
+    }
+  }
   if (cleared) {
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
@@ -227,6 +253,7 @@ function clearLines() {
     if (armedPower !== null && !firingPower) triggerPowerUp();
     if (mode === MODES.TIME && lines >= TIME_TARGET_LINES) endGame("win");
   }
+  return cleared;
 }
 
 // ---- Modo Basura ----
@@ -521,6 +548,181 @@ function toggleTheme() {
   applyTheme(nextTheme);
 }
 
+// ---- Tabla de records ----
+
+function sanitizeNumber(v) {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0
+    ? Math.floor(v)
+    : 0;
+}
+
+function sanitizeEntry(e) {
+  if (!e || typeof e !== "object" || Array.isArray(e)) return null;
+  if (typeof e.score !== "number" || !Number.isFinite(e.score)) return null;
+  return {
+    name: (typeof e.name === "string" ? e.name : DEFAULT_NAME).slice(
+      0,
+      NAME_MAX,
+    ),
+    score: sanitizeNumber(e.score),
+    lines: sanitizeNumber(e.lines),
+    combo: sanitizeNumber(e.combo),
+    mode: typeof e.mode === "string" ? e.mode.slice(0, 20) : "",
+    date: typeof e.date === "string" ? e.date : "",
+  };
+}
+
+function loadHiscores() {
+  let raw;
+  try {
+    raw = localStorage.getItem(HISCORES_KEY);
+  } catch (err) {
+    return [];
+  }
+  if (!raw) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map(sanitizeEntry)
+    .filter((e) => e !== null)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, HISCORES_MAX);
+}
+
+function saveHiscores(list) {
+  try {
+    localStorage.setItem(HISCORES_KEY, JSON.stringify(list));
+    return true;
+  } catch (err) {
+    // almacenamiento no disponible: los records no persisten
+    return false;
+  }
+}
+
+function qualifiesForHiscores(value) {
+  if (value <= 0) return false;
+  const list = loadHiscores();
+  if (list.length < HISCORES_MAX) return true;
+  return value > list[list.length - 1].score;
+}
+
+function buildHiscoreTable(list, highlight) {
+  const table = document.createElement("table");
+  table.className = "hiscore-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["#", "NOMBRE", "PTS", "LÍN", "COMBO"].forEach((text) => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  list.forEach((entry, i) => {
+    const tr = document.createElement("tr");
+    if (i === highlight) tr.classList.add("hiscore-new");
+
+    const pos = document.createElement("td");
+    pos.className = "hiscore-pos";
+    pos.textContent = String(i + 1);
+
+    const name = document.createElement("td");
+    name.className = "hiscore-name";
+    // textContent: el nombre lo escribe el usuario, nunca innerHTML
+    name.textContent = entry.name || DEFAULT_NAME;
+    if (entry.mode) {
+      const modeSpan = document.createElement("span");
+      modeSpan.className = "hiscore-mode";
+      modeSpan.textContent = ` · ${entry.mode}`;
+      name.appendChild(modeSpan);
+    }
+
+    const sc = document.createElement("td");
+    sc.className = "hiscore-score";
+    sc.textContent = entry.score.toLocaleString();
+
+    const ln = document.createElement("td");
+    ln.textContent = String(entry.lines);
+
+    const cb = document.createElement("td");
+    cb.textContent = String(entry.combo);
+
+    tr.append(pos, name, sc, ln, cb);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+function renderHiscoresInto(container, list) {
+  container.textContent = "";
+  if (!list.length) {
+    const p = document.createElement("p");
+    p.className = "hiscore-empty";
+    p.textContent = "Sin records todavía";
+    container.appendChild(p);
+    return;
+  }
+  container.appendChild(buildHiscoreTable(list, newHiscoreIndex));
+}
+
+function renderHiscores(list) {
+  const data = list || loadHiscores();
+  renderHiscoresInto(menuHiscoresEl, data);
+  renderHiscoresInto(overlayHiscoresEl, data);
+}
+
+function submitHiscore() {
+  if (hiscoreFormEl.classList.contains("hidden")) return;
+  hiscoreFormEl.classList.add("hidden");
+  const name = hiscoreNameEl.value.trim().slice(0, NAME_MAX) || DEFAULT_NAME;
+  const entry = {
+    name,
+    score,
+    lines,
+    combo: maxCombo,
+    mode: MODE_NAMES[mode] || "",
+    date: new Date().toISOString(),
+  };
+  const list = loadHiscores();
+  list.push(entry);
+  list.sort((a, b) => b.score - a.score);
+  const trimmed = list.slice(0, HISCORES_MAX);
+  newHiscoreIndex = trimmed.indexOf(entry);
+  saveHiscores(trimmed);
+  // se pinta la lista en memoria: si localStorage falla, la fila resaltada
+  // sigue siendo la correcta en pantalla
+  renderHiscores(trimmed);
+}
+
+// si el jugador sale del overlay sin pulsar Guardar, no perdemos el record
+function autoSubmitHiscore() {
+  if (!hiscoreFormEl.classList.contains("hidden")) submitHiscore();
+}
+
+function clearHiscores() {
+  if (!confirm("¿Seguro que quieres borrar todos los records?")) return;
+  try {
+    localStorage.removeItem(HISCORES_KEY);
+  } catch (err) {
+    /* nada que hacer */
+  }
+  newHiscoreIndex = -1;
+  renderHiscores();
+}
+
+function hideHiscoreForm() {
+  hiscoreFormEl.classList.add("hidden");
+}
+
 function endGame(reason) {
   if (gameOver) return;
   gameOver = true;
@@ -536,7 +738,18 @@ function endGame(reason) {
     overlayTitle.textContent = "GAME OVER";
     overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
   }
+  newHiscoreIndex = -1;
+  overlayHiscoresEl.classList.remove("hidden");
+  renderHiscores();
+  const isRecord = qualifiesForHiscores(score);
+  hiscoreFormEl.classList.toggle("hidden", !isRecord);
   overlay.classList.remove("hidden");
+  if (isRecord) {
+    // se conserva el último nombre escrito; "ANON" solo como valor inicial
+    if (!hiscoreNameEl.value.trim()) hiscoreNameEl.value = DEFAULT_NAME;
+    hiscoreNameEl.focus();
+    hiscoreNameEl.select();
+  }
 }
 
 function togglePause() {
@@ -549,6 +762,8 @@ function togglePause() {
     cancelAnimationFrame(animId);
     overlayTitle.textContent = "PAUSA";
     overlayScore.textContent = "";
+    hideHiscoreForm();
+    overlayHiscoresEl.classList.add("hidden");
     overlay.classList.remove("hidden");
   }
 }
@@ -611,6 +826,8 @@ function showMenu() {
   gameOver = true;
   paused = false;
   overlay.classList.add("hidden");
+  hideHiscoreForm();
+  renderHiscores();
   menuEl.classList.remove("hidden");
 }
 
@@ -629,6 +846,10 @@ function init() {
   firingPower = false;
   lastLockX = Math.floor(COLS / 2);
   lastLockY = ROWS - 1;
+  combo = 0;
+  maxCombo = 0;
+  newHiscoreIndex = -1;
+  hideHiscoreForm();
   next = randomPiece();
   spawn();
   updateHUD();
@@ -666,12 +887,24 @@ document.addEventListener("keydown", (e) => {
   updateHUD();
 });
 
-restartBtn.addEventListener("click", () => startGame(mode));
-menuBtn.addEventListener("click", showMenu);
+restartBtn.addEventListener("click", () => {
+  autoSubmitHiscore();
+  startGame(mode);
+});
+menuBtn.addEventListener("click", () => {
+  autoSubmitHiscore();
+  showMenu();
+});
 modeButtons.forEach((btn) =>
   btn.addEventListener("click", () => startGame(btn.dataset.mode)),
 );
 themeToggleBtn.addEventListener("click", toggleTheme);
+hiscoreSaveBtn.addEventListener("click", submitHiscore);
+hiscoreNameEl.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter") submitHiscore();
+});
+clearHiscoresBtn.addEventListener("click", clearHiscores);
 
 applyTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
 showMenu();
