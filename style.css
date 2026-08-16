@@ -112,7 +112,7 @@ body {
 #board {
   display: block;
   border: 1px solid var(--surface-border);
-  background: var(--surface-bg);
+  background: var(--board-bg, var(--surface-bg));
   border-radius: 4px;
   box-shadow: 0 0 40px var(--board-shadow);
 }
@@ -156,7 +156,7 @@ body {
 #next-canvas {
   display: block;
   border: 1px solid var(--surface-border);
-  background: var(--surface-bg);
+  background: var(--board-bg, var(--surface-bg));
   border-radius: 4px;
 }
 
@@ -323,4 +323,58 @@ kbd {
 .mode-desc {
   font-size: 11px;
   color: var(--controls-text);
+}
+
+/* ---- Skins ---- */
+#skin-select {
+  position: absolute;
+  top: -56px;
+  right: 46px;
+  z-index: 10;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+#skin-select:hover {
+  border-color: var(--accent);
+}
+
+/* Cada skin redefine el fondo del tablero y el color de la rejilla.
+   Van al final para ganar al bloque [data-theme="light"] (misma especificidad). */
+[data-skin="neon"] {
+  --board-bg: #05050c;
+  --grid-line: #16162c;
+}
+
+[data-skin="neon"][data-theme="light"] {
+  --board-bg: #0b0b16;
+  --grid-line: #22223c;
+}
+
+[data-skin="pastel"] {
+  --board-bg: #2b2739;
+  --grid-line: #3c3654;
+}
+
+[data-skin="pastel"][data-theme="light"] {
+  --board-bg: #fdfbff;
+  --grid-line: #ebe5f6;
+}
+
+[data-skin="pixel"] {
+  --board-bg: #101018;
+  --grid-line: #242434;
+}
+
+[data-skin="pixel"][data-theme="light"] {
+  --board-bg: #f6f6fb;
+  --grid-line: #dcdce9;
 }
