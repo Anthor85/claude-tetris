@@ -122,8 +122,18 @@ const garbageSection = document.getElementById("garbage-section");
 const garbageTimerEl = document.getElementById("garbage-timer");
 const powerSection = document.getElementById("power-section");
 const modeButtons = document.querySelectorAll(".mode-btn");
+const pauseMenuEl = document.getElementById("pause-menu");
+const resumeBtn = document.getElementById("resume-btn");
+const pauseRestartBtn = document.getElementById("pause-restart-btn");
+const controlsBtn = document.getElementById("controls-btn");
+const pauseControlsEl = document.getElementById("pause-controls");
+const startLevelSelect = document.getElementById("start-level");
 
 const THEME_KEY = "tetris-theme";
+const START_LEVEL_KEY = "tetris-start-level";
+const MAX_START_LEVEL = 15;
+
+let startLevel = 1;
 
 let board,
   current,
@@ -221,7 +231,7 @@ function clearLines() {
   if (cleared) {
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
-    level = Math.floor(lines / 10) + 1;
+    level = startLevel + Math.floor(lines / 10);
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
     if (armedPower !== null && !firingPower) triggerPowerUp();
@@ -539,17 +549,60 @@ function endGame(reason) {
   overlay.classList.remove("hidden");
 }
 
+// ---- Menú de pausa ----
+
+function buildStartLevelOptions() {
+  for (let i = 1; i <= MAX_START_LEVEL; i++) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `Nivel ${i}`;
+    startLevelSelect.appendChild(opt);
+  }
+}
+
+function loadStartLevel() {
+  const stored = parseInt(localStorage.getItem(START_LEVEL_KEY), 10);
+  startLevel = Number.isFinite(stored)
+    ? clamp(stored, 1, MAX_START_LEVEL)
+    : 1;
+  startLevelSelect.value = String(startLevel);
+}
+
+function onStartLevelChange() {
+  startLevel = clamp(
+    parseInt(startLevelSelect.value, 10) || 1,
+    1,
+    MAX_START_LEVEL,
+  );
+  localStorage.setItem(START_LEVEL_KEY, String(startLevel));
+}
+
+function toggleControlsPanel() {
+  const hidden = pauseControlsEl.classList.toggle("hidden");
+  controlsBtn.setAttribute("aria-expanded", String(!hidden));
+  controlsBtn.textContent = hidden ? "Ver controles" : "Ocultar controles";
+}
+
+function hidePauseMenu() {
+  // sin foco dentro del menú, las teclas del juego no van al select ni a un botón
+  if (pauseMenuEl.contains(document.activeElement)) document.activeElement.blur();
+  pauseMenuEl.classList.add("hidden");
+  pauseControlsEl.classList.add("hidden");
+  controlsBtn.setAttribute("aria-expanded", "false");
+  controlsBtn.textContent = "Ver controles";
+}
+
 function togglePause() {
   if (gameOver) return;
   paused = !paused;
   if (!paused) {
+    hidePauseMenu();
     lastTime = performance.now();
     loop(lastTime);
   } else {
     cancelAnimationFrame(animId);
-    overlayTitle.textContent = "PAUSA";
-    overlayScore.textContent = "";
-    overlay.classList.remove("hidden");
+    startLevelSelect.value = String(startLevel);
+    pauseMenuEl.classList.remove("hidden");
   }
 }
 
@@ -611,6 +664,7 @@ function showMenu() {
   gameOver = true;
   paused = false;
   overlay.classList.add("hidden");
+  hidePauseMenu();
   menuEl.classList.remove("hidden");
 }
 
@@ -618,10 +672,10 @@ function init() {
   board = createBoard();
   score = 0;
   lines = 0;
-  level = 1;
+  level = startLevel;
   paused = false;
   gameOver = false;
-  dropInterval = 1000;
+  dropInterval = Math.max(100, 1000 - (level - 1) * 90);
   dropAccum = 0;
   lastTime = performance.now();
   armedPower = null;
@@ -634,12 +688,24 @@ function init() {
   updateHUD();
   updatePowerHUD();
   overlay.classList.add("hidden");
+  hidePauseMenu();
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.code === "KeyP") {
+  // dentro del menú de pausa solo Escape actúa: teclear en el select o en un
+  // botón no debe mover la pieza ni alternar la pausa
+  const inPauseMenu = pauseMenuEl.contains(e.target);
+
+  if (e.code === "Escape") {
+    e.preventDefault();
+    // Escape no hace nada con el menú de modos o el game over visibles
+    if (menuEl.classList.contains("hidden") && overlay.classList.contains("hidden"))
+      togglePause();
+    return;
+  }
+  if (e.code === "KeyP" && !inPauseMenu) {
     togglePause();
     return;
   }
@@ -673,5 +739,23 @@ modeButtons.forEach((btn) =>
 );
 themeToggleBtn.addEventListener("click", toggleTheme);
 
+// al pulsar con el ratón se quita el foco del botón para que un Space/Enter
+// posterior no lo re-active al volver al juego
+resumeBtn.addEventListener("click", () => {
+  resumeBtn.blur();
+  togglePause();
+});
+pauseRestartBtn.addEventListener("click", () => {
+  pauseRestartBtn.blur();
+  startGame(mode);
+});
+controlsBtn.addEventListener("click", () => {
+  controlsBtn.blur();
+  toggleControlsPanel();
+});
+startLevelSelect.addEventListener("change", onStartLevelChange);
+
 applyTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
+buildStartLevelOptions();
+loadStartLevel();
 showMenu();
